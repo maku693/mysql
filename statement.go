@@ -139,13 +139,28 @@ var jsonType = reflect.TypeOf(json.RawMessage{})
 
 type converter struct{}
 
+// IsValue wraps the reference/default implementation in database/sql/driver
+// to support uint64 with high bit.
+func IsValue(v interface{}) bool {
+	if driver.IsValue(v) {
+		return true
+	}
+	// A value returend from the Valuer interface can be "a type handled by
+	// a database driver's NamedValueChecker interface" so we should accept
+	// uint64 here as well.
+	if _, ok := v.(uint64); ok {
+		return true
+	}
+	return false
+}
+
 // ConvertValue mirrors the reference/default converter in database/sql/driver
 // with _one_ exception.  We support uint64 with their high bit and the default
 // implementation does not.  This function should be kept in sync with
 // database/sql/driver defaultConverter.ConvertValue() except for that
 // deliberate difference.
 func (c converter) ConvertValue(v interface{}) (driver.Value, error) {
-	if driver.IsValue(v) {
+	if IsValue(v) {
 		return v, nil
 	}
 
@@ -154,14 +169,8 @@ func (c converter) ConvertValue(v interface{}) (driver.Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		if driver.IsValue(sv) {
+		if IsValue(sv) {
 			return sv, nil
-		}
-		// A value returend from the Valuer interface can be "a type handled by
-		// a database driver's NamedValueChecker interface" so we should accept
-		// uint64 here as well.
-		if u, ok := sv.(uint64); ok {
-			return u, nil
 		}
 		return nil, fmt.Errorf("non-Value type %T returned from Value", sv)
 	}
